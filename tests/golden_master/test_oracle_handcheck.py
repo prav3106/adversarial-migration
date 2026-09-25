@@ -21,3 +21,14 @@ def test_same_product_rounded_vs_truncated():
     out = _run_taxcalc("190.00", "0.0275")
     assert out["TC-TAX-AMOUNT"] == Decimal("5.23")
     assert out["TC-BRACKET-TAX"] == Decimal("5.22")
+    
+def test_signed_input_uses_ascii_overpunch_and_sign_is_dropped():
+    # Harness encodes -999.99 with ASCII overpunch ('y' = negative 9);
+    # VALIDATE's MOVE into an unsigned field drops the sign -> 999.99.
+    fields = load_dict("VALIDATE")
+    rec = {f["field_name"]: Decimal("0") for f in input_fields(fields)}
+    rec["VL-HOURS-WORKED"] = Decimal("-999.99")
+    enc = encode_input(rec, input_fields(fields))
+    assert b"9999y" in enc
+    raw = run_cobol("VALIDATE", enc)
+    assert decode_output(raw, output_fields(fields))["VL-HOURS-CLEAN"] == Decimal("999.99")
