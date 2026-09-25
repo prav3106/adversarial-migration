@@ -18,7 +18,26 @@ import sys
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from decimal import Decimal
 
+PINNED_CASES = {
+    "TAXCALC": [
+        # Exact tie: HALF_UP -> 5.01, HALF_EVEN (banker's) -> 5.00
+        {"TC-GROSS-PAY": Decimal("100.10"), "TC-TAX-RATE": Decimal("0.0500")},
+        # Two-stage truncation: 190.00 * 0.0275 = 5.225 -> COBOL stores 5.22
+        {"TC-GROSS-PAY": Decimal("190.00"), "TC-TAX-RATE": Decimal("0.0275")},
+    ],
+}
+
+
+def with_pinned(program, records):
+    """Replace the first records with pinned cases, filling other fields from a generated record."""
+    cases = PINNED_CASES.get(program, [])
+    if not cases or not records:
+        return records
+    base = records[0]
+    pinned = [{**base, **case} for case in cases]
+    return pinned + records[len(pinned):]
 DICT_PATH = Path(__file__).parent.parent / "dictionary" / "data_dictionary.json"
 
 BOUNDARY_CLASSES = [
@@ -163,7 +182,7 @@ def generate_inputs(
             rec[f["field_name"]] = val
         records.append(rec)
 
-    return records[:count]
+    return with_pinned(program, records[:count])
 
 
 # ---------------------------------------------------------------------------
