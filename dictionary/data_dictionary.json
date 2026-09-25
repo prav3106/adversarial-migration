@@ -1,8 +1,10 @@
 [
   {
-    "field_name": "EMP-ID",
-    "programs": ["PAYROLL"],
-    "pic": "9(6)",
+    "field_name": "DD-EMP-ID",
+    "programs": [
+      "DEDUCT"
+    ],
+    "pic": "9(6).",
     "usage": "DISPLAY",
     "digits_before": 6,
     "digits_after": 0,
@@ -11,12 +13,168 @@
     "length": 6,
     "python_type": "Decimal",
     "rounding": "truncate",
-    "source_line": 33
+    "record_type": "input",
+    "source_line": 47
   },
   {
-    "field_name": "HOURS-WORKED",
-    "programs": ["PAYROLL"],
-    "pic": "9(3)V9(2)",
+    "field_name": "DD-GROSS-PAY",
+    "programs": [
+      "DEDUCT"
+    ],
+    "pic": "9(7)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 6,
+    "length": 9,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 48
+  },
+  {
+    "field_name": "DD-HEALTH-RATE",
+    "programs": [
+      "DEDUCT"
+    ],
+    "pic": "9(2)V9(4).",
+    "usage": "DISPLAY",
+    "digits_before": 2,
+    "digits_after": 4,
+    "signed": false,
+    "offset": 15,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 49
+  },
+  {
+    "field_name": "DD-RETIREMENT-RATE",
+    "programs": [
+      "DEDUCT"
+    ],
+    "pic": "9(2)V9(4).",
+    "usage": "DISPLAY",
+    "digits_before": 2,
+    "digits_after": 4,
+    "signed": false,
+    "offset": 21,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 50
+  },
+  {
+    "field_name": "DD-OUT-EMP-ID",
+    "programs": [
+      "DEDUCT"
+    ],
+    "pic": "9(6).",
+    "usage": "DISPLAY",
+    "digits_before": 6,
+    "digits_after": 0,
+    "signed": false,
+    "offset": 0,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 54
+  },
+  {
+    "field_name": "DD-HEALTH-DED",
+    "programs": [
+      "DEDUCT"
+    ],
+    "pic": "9(5)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 5,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 6,
+    "length": 7,
+    "python_type": "Decimal",
+    "rounding": "half_up",
+    "record_type": "output",
+    "source_line": 55
+  },
+  {
+    "field_name": "DD-RETIRE-DED",
+    "programs": [
+      "DEDUCT"
+    ],
+    "pic": "9(5)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 5,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 13,
+    "length": 7,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 56
+  },
+  {
+    "field_name": "DD-TOTAL-DEDUCT",
+    "programs": [
+      "DEDUCT"
+    ],
+    "pic": "9(5)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 5,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 20,
+    "length": 7,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 57
+  },
+  {
+    "field_name": "DD-AFTER-DEDUCT",
+    "programs": [
+      "DEDUCT"
+    ],
+    "pic": "9(7)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 27,
+    "length": 9,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 58
+  },
+  {
+    "field_name": "GP-EMP-ID",
+    "programs": [
+      "GROSSPAY"
+    ],
+    "pic": "9(6).",
+    "usage": "DISPLAY",
+    "digits_before": 6,
+    "digits_after": 0,
+    "signed": false,
+    "offset": 0,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 45
+  },
+  {
+    "field_name": "GP-HOURS-WORKED",
+    "programs": [
+      "GROSSPAY"
+    ],
+    "pic": "9(3)V9(2).",
     "usage": "DISPLAY",
     "digits_before": 3,
     "digits_after": 2,
@@ -25,12 +183,15 @@
     "length": 5,
     "python_type": "Decimal",
     "rounding": "truncate",
-    "source_line": 34
+    "record_type": "input",
+    "source_line": 46
   },
   {
-    "field_name": "HOURLY-RATE",
-    "programs": ["PAYROLL"],
-    "pic": "9(4)V9(2)",
+    "field_name": "GP-HOURLY-RATE",
+    "programs": [
+      "GROSSPAY"
+    ],
+    "pic": "9(4)V9(2).",
     "usage": "DISPLAY",
     "digits_before": 4,
     "digits_after": 2,
@@ -39,26 +200,100 @@
     "length": 6,
     "python_type": "Decimal",
     "rounding": "truncate",
-    "source_line": 35
+    "record_type": "input",
+    "source_line": 47
   },
   {
-    "field_name": "TAX-RATE",
-    "programs": ["PAYROLL"],
-    "pic": "9(2)V9(4)",
+    "field_name": "GP-OUT-EMP-ID",
+    "programs": [
+      "GROSSPAY"
+    ],
+    "pic": "9(6).",
     "usage": "DISPLAY",
-    "digits_before": 2,
-    "digits_after": 4,
+    "digits_before": 6,
+    "digits_after": 0,
     "signed": false,
-    "offset": 17,
+    "offset": 0,
     "length": 6,
     "python_type": "Decimal",
     "rounding": "truncate",
-    "source_line": 36
+    "record_type": "output",
+    "source_line": 51
   },
   {
-    "field_name": "GROSS-PAY",
-    "programs": ["PAYROLL"],
+    "field_name": "GP-REGULAR-PAY",
+    "programs": [
+      "GROSSPAY"
+    ],
     "pic": "9(7)V9(2)",
+    "usage": "COMP-3",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 6,
+    "length": 5,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 52
+  },
+  {
+    "field_name": "GP-OVERTIME-PAY",
+    "programs": [
+      "GROSSPAY"
+    ],
+    "pic": "9(7)V9(2)",
+    "usage": "COMP-3",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 11,
+    "length": 5,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 53
+  },
+  {
+    "field_name": "GP-GROSS-PAY",
+    "programs": [
+      "GROSSPAY"
+    ],
+    "pic": "9(7)V9(2)",
+    "usage": "COMP-3",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 16,
+    "length": 5,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 54
+  },
+  {
+    "field_name": "PS-EMP-ID",
+    "programs": [
+      "PAYSLIP"
+    ],
+    "pic": "9(6).",
+    "usage": "DISPLAY",
+    "digits_before": 6,
+    "digits_after": 0,
+    "signed": false,
+    "offset": 0,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 48
+  },
+  {
+    "field_name": "PS-GROSS-PAY",
+    "programs": [
+      "PAYSLIP"
+    ],
+    "pic": "9(7)V9(2).",
     "usage": "DISPLAY",
     "digits_before": 7,
     "digits_after": 2,
@@ -67,12 +302,15 @@
     "length": 9,
     "python_type": "Decimal",
     "rounding": "truncate",
-    "source_line": 43
+    "record_type": "input",
+    "source_line": 49
   },
   {
-    "field_name": "TAX-AMOUNT",
-    "programs": ["PAYROLL"],
-    "pic": "9(7)V9(2)",
+    "field_name": "PS-TAX-AMOUNT",
+    "programs": [
+      "PAYSLIP"
+    ],
+    "pic": "9(7)V9(2).",
     "usage": "DISPLAY",
     "digits_before": 7,
     "digits_after": 2,
@@ -81,12 +319,236 @@
     "length": 9,
     "python_type": "Decimal",
     "rounding": "truncate",
-    "source_line": 44
+    "record_type": "input",
+    "source_line": 50
   },
   {
-    "field_name": "NET-PAY",
-    "programs": ["PAYROLL"],
-    "pic": "9(7)V9(2)",
+    "field_name": "PS-DEDUCTIONS",
+    "programs": [
+      "PAYSLIP"
+    ],
+    "pic": "9(5)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 5,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 24,
+    "length": 7,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 51
+  },
+  {
+    "field_name": "PS-OUT-EMP-ID",
+    "programs": [
+      "PAYSLIP"
+    ],
+    "pic": "9(6).",
+    "usage": "DISPLAY",
+    "digits_before": 6,
+    "digits_after": 0,
+    "signed": false,
+    "offset": 0,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 55
+  },
+  {
+    "field_name": "PS-OUT-GROSS",
+    "programs": [
+      "PAYSLIP"
+    ],
+    "pic": "9(7)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 6,
+    "length": 9,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 56
+  },
+  {
+    "field_name": "PS-OUT-TAX",
+    "programs": [
+      "PAYSLIP"
+    ],
+    "pic": "9(7)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 15,
+    "length": 9,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 57
+  },
+  {
+    "field_name": "PS-OUT-DEDUCT",
+    "programs": [
+      "PAYSLIP"
+    ],
+    "pic": "9(5)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 5,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 24,
+    "length": 7,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 58
+  },
+  {
+    "field_name": "PS-NET-PAY",
+    "programs": [
+      "PAYSLIP"
+    ],
+    "pic": "S9(7)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": true,
+    "offset": 31,
+    "length": 9,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 59
+  },
+  {
+    "field_name": "PS-NET-UNSIGNED",
+    "programs": [
+      "PAYSLIP"
+    ],
+    "pic": "9(7)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 40,
+    "length": 9,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 60
+  },
+  {
+    "field_name": "TC-EMP-ID",
+    "programs": [
+      "TAXCALC"
+    ],
+    "pic": "9(6).",
+    "usage": "DISPLAY",
+    "digits_before": 6,
+    "digits_after": 0,
+    "signed": false,
+    "offset": 0,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 45
+  },
+  {
+    "field_name": "TC-GROSS-PAY",
+    "programs": [
+      "TAXCALC"
+    ],
+    "pic": "9(7)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 6,
+    "length": 9,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 46
+  },
+  {
+    "field_name": "TC-TAX-RATE",
+    "programs": [
+      "TAXCALC"
+    ],
+    "pic": "9(2)V9(4).",
+    "usage": "DISPLAY",
+    "digits_before": 2,
+    "digits_after": 4,
+    "signed": false,
+    "offset": 15,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 47
+  },
+  {
+    "field_name": "TC-OUT-EMP-ID",
+    "programs": [
+      "TAXCALC"
+    ],
+    "pic": "9(6).",
+    "usage": "DISPLAY",
+    "digits_before": 6,
+    "digits_after": 0,
+    "signed": false,
+    "offset": 0,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 51
+  },
+  {
+    "field_name": "TC-OUT-GROSS-PAY",
+    "programs": [
+      "TAXCALC"
+    ],
+    "pic": "9(7)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 6,
+    "length": 9,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 52
+  },
+  {
+    "field_name": "TC-TAX-AMOUNT",
+    "programs": [
+      "TAXCALC"
+    ],
+    "pic": "9(7)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 7,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 15,
+    "length": 9,
+    "python_type": "Decimal",
+    "rounding": "half_up",
+    "record_type": "output",
+    "source_line": 53
+  },
+  {
+    "field_name": "TC-BRACKET-TAX",
+    "programs": [
+      "TAXCALC"
+    ],
+    "pic": "9(7)V9(2).",
     "usage": "DISPLAY",
     "digits_before": 7,
     "digits_after": 2,
@@ -95,6 +557,160 @@
     "length": 9,
     "python_type": "Decimal",
     "rounding": "truncate",
-    "source_line": 45
+    "record_type": "output",
+    "source_line": 54
+  },
+  {
+    "field_name": "VL-EMP-ID",
+    "programs": [
+      "VALIDATE"
+    ],
+    "pic": "9(6).",
+    "usage": "DISPLAY",
+    "digits_before": 6,
+    "digits_after": 0,
+    "signed": false,
+    "offset": 0,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 47
+  },
+  {
+    "field_name": "VL-EMP-NAME",
+    "programs": [
+      "VALIDATE"
+    ],
+    "pic": "X(20).",
+    "usage": "DISPLAY",
+    "digits_before": 0,
+    "digits_after": 0,
+    "signed": false,
+    "offset": 6,
+    "length": 20,
+    "python_type": "str",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 48
+  },
+  {
+    "field_name": "VL-HOURS-WORKED",
+    "programs": [
+      "VALIDATE"
+    ],
+    "pic": "S9(3)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 3,
+    "digits_after": 2,
+    "signed": true,
+    "offset": 26,
+    "length": 5,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 49
+  },
+  {
+    "field_name": "VL-HOURLY-RATE",
+    "programs": [
+      "VALIDATE"
+    ],
+    "pic": "9(4)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 4,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 31,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "input",
+    "source_line": 50
+  },
+  {
+    "field_name": "VL-OUT-EMP-ID",
+    "programs": [
+      "VALIDATE"
+    ],
+    "pic": "9(6).",
+    "usage": "DISPLAY",
+    "digits_before": 6,
+    "digits_after": 0,
+    "signed": false,
+    "offset": 0,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 54
+  },
+  {
+    "field_name": "VL-OUT-EMP-NAME",
+    "programs": [
+      "VALIDATE"
+    ],
+    "pic": "X(20).",
+    "usage": "DISPLAY",
+    "digits_before": 0,
+    "digits_after": 0,
+    "signed": false,
+    "offset": 6,
+    "length": 20,
+    "python_type": "str",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 55
+  },
+  {
+    "field_name": "VL-HOURS-CLEAN",
+    "programs": [
+      "VALIDATE"
+    ],
+    "pic": "9(3)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 3,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 26,
+    "length": 5,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 56
+  },
+  {
+    "field_name": "VL-HOURLY-CLEAN",
+    "programs": [
+      "VALIDATE"
+    ],
+    "pic": "9(4)V9(2).",
+    "usage": "DISPLAY",
+    "digits_before": 4,
+    "digits_after": 2,
+    "signed": false,
+    "offset": 31,
+    "length": 6,
+    "python_type": "Decimal",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 57
+  },
+  {
+    "field_name": "VL-VALID-FLAG",
+    "programs": [
+      "VALIDATE"
+    ],
+    "pic": "X(1).",
+    "usage": "DISPLAY",
+    "digits_before": 0,
+    "digits_after": 0,
+    "signed": false,
+    "offset": 37,
+    "length": 1,
+    "python_type": "str",
+    "rounding": "truncate",
+    "record_type": "output",
+    "source_line": 58
   }
 ]

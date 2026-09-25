@@ -7,7 +7,7 @@ Produces inputs covering every boundary class required by PROJECT_CONTEXT.md:
   negative_max (signed only) · rounding_edge · overflow · random_mid_range
 
 Usage (standalone):
-    python -m golden_master.strategies --program PAYROLL --count 20
+    python -m golden_master.strategies --program GROSSPAY --count 20
 """
 from __future__ import annotations
 
@@ -21,10 +21,25 @@ from typing import Any
 
 DICT_PATH = Path(__file__).parent.parent / "dictionary" / "data_dictionary.json"
 
+BOUNDARY_CLASSES = [
+    "zero",
+    "smallest_unit",
+    "max_value",
+    "max_minus_unit",
+    "negative_max",
+    "rounding_edge",
+    "overflow",
+    "random_mid_range",
+]
+
 
 def _load_dict(program: str) -> list[dict[str, Any]]:
     entries = json.loads(DICT_PATH.read_text())
     return [e for e in entries if program in e.get("programs", [])]
+
+
+def _input_fields(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [f for f in fields if f.get("record_type") == "input"]
 
 
 def _field_max(entry: dict[str, Any]) -> Decimal:
@@ -45,68 +60,41 @@ def _smallest_unit(entry: dict[str, Any]) -> Decimal:
 
 
 def _rounding_edge(entry: dict[str, Any]) -> Decimal:
-    """Return x.xx5 — the first value that would round up with ROUND_HALF_UP."""
+    """Return the value x.xx5 — first value that rounds up with ROUND_HALF_UP."""
     scale = entry["digits_after"]
     if scale == 0:
         return Decimal("0")
-    unit = _smallest_unit(entry)
-    return unit * Decimal("5") / Decimal("10")
+    # One sub-unit below the rounding threshold: 0.005 for scale=2
+    return Decimal("5") / Decimal(10 ** (scale + 1))
 
 
-# ---------------------------------------------------------------------------
-# Boundary generators per field
-# ---------------------------------------------------------------------------
-
-BOUNDARY_CLASSES = [
-    "zero",
-    "smallest_unit",
-    "max_value",
-    "max_minus_unit",
-    "negative_max",
-    "rounding_edge",
-    "overflow",
-    "random_mid_range",
-]
-
-
-def boundary_values(entry: dict[str, Any]) -> dict[str, Decimal]:
+def boundary_values(entry: dict[str, Any]) -> dict[str, Any]:
     """Return one sample value per boundary class for a single field."""
-    mx = _field_max(entry)
-    su = _smallest_unit(entry)
-    re_ = _rounding_edge(entry)
-    signed = entry.get("signed", False)
     python_type = entry.get("python_type", "Decimal")
+    signed = entry.get("signed", False)
 
     if python_type != "Decimal":
-        # Non-numeric: boundary concept does not apply; return a filler string
         length = entry.get("length", 1)
         filler = " " * length
         return {cls: filler for cls in BOUNDARY_CLASSES}  # type: ignore[return-value]
 
-    overflow_val = mx + su
+    mx = _field_max(entry)
+    su = _smallest_unit(entry)
+    re_ = _rounding_edge(entry)
 
-    samples: dict[str, Decimal] = {
+    samples: dict[str, Any] = {
         "zero": Decimal("0"),
         "smallest_unit": su,
         "max_value": mx,
         "max_minus_unit": mx - su,
         "negative_max": -mx if signed else Decimal("0"),
         "rounding_edge": re_,
-        "overflow": overflow_val,
-        "random_mid_range": Decimal(str(round(random.uniform(0, float(mx / 2)), entry["digits_after"]))),
+        "overflow": mx + su,
+        "random_mid_range": Decimal(
+            str(round(random.uniform(0, float(mx / 2)), entry["digits_after"]))
+        ),
     }
     return samples
-
-
-# ---------------------------------------------------------------------------
-# Full record generator
-# ---------------------------------------------------------------------------
-
-def input_fields_for_program(program: str) -> list[dict[str, Any]]:
-    """Return only the *input* fields (those at input offsets, not output)."""
-    entries = _load_dict(program)
-    # For simplicity, return all fields — callers filter as needed.
-    return entries
 
 
 def generate_inputs(
@@ -117,54 +105,62 @@ def generate_inputs(
     """
     Generate `count` input records for `program`.
 
-    The first 8 records are one per boundary class (deterministic).
+    The first 8 records are one per boundary class (deterministic once seeded).
     Remaining records are random mid-range draws.
+
+    All numeric values are Decimal instances — never float.
     """
     if seed is not None:
         random.seed(seed)
 
-    entries = input_fields_for_program(program)
-    # Separate input fields from output fields by their usage intent.
-    # Convention: if the field appears only in output (e.g. GROSS-PAY), skip.
-    # We rely on offset ordering: lowest offsets = input side.
-    # For now include all fields in the dict; run_legacy will map to bytes.
-    input_only_names = {
-        "EMP-ID", "HOURS-WORKED", "HOURLY-RATE", "TAX-RATE"
-    }
-    input_fields = [e for e in entries if e["field_name"] in input_only_names]
+    all_fields = _load_dict(program)
+    in_fields = _input_fields(all_fields)
+
+    # Separate numeric from string fields
+    numeric_fields = [f for f in in_fields if f["python_type"] == "Decimal"]
+    string_fields = [f for f in in_fields if f["python_type"] != "Decimal"]
+
+    # Select the primary numeric field (first numeric) for driving boundary class
+    # For negative_max class: use the first signed field if available; else EMP-ID
+    signed_fields = [f for f in numeric_fields if f.get("signed")]
 
     records: list[dict[str, Any]] = []
 
-    # One record per boundary class using the *first* numeric input field
-    if input_fields:
-        primary = next((f for f in input_fields if f["python_type"] == "Decimal"), input_fields[0])
-        bvals = boundary_values(primary)
-        for cls in BOUNDARY_CLASSES:
-            rec: dict[str, Any] = {}
-            for field in input_fields:
-                if field["python_type"] == "Decimal":
-                    bv = boundary_values(field)
-                    if cls == "negative_max" and not field.get("signed"):
-                        rec[field["field_name"]] = Decimal("0")
-                    elif cls == "overflow":
-                        rec[field["field_name"]] = _field_max(field) + _smallest_unit(field)
-                    else:
-                        rec[field["field_name"]] = bv.get(cls, Decimal("0"))
-                else:
-                    rec[field["field_name"]] = " " * field["length"]
-            records.append(rec)
+    # Produce one record per boundary class
+    for cls in BOUNDARY_CLASSES:
+        rec: dict[str, Any] = {}
 
-    # Fill up to `count` with random mid-range
+        # String fields: always use a fixed placeholder
+        for f in string_fields:
+            rec[f["field_name"]] = " " * f["length"]
+
+        # Numeric fields: pick boundary value per field
+        for f in numeric_fields:
+            bv = boundary_values(f)
+            val = bv.get(cls, Decimal("0"))
+
+            # negative_max on unsigned field → use 0 (negative_max class is for signed)
+            if cls == "negative_max" and not f.get("signed"):
+                val = Decimal("0")
+
+            # For rounding_edge: keep the sub-unit value that triggers rounding
+            # (the COBOL COMPUTE without ROUNDED will truncate it)
+            rec[f["field_name"]] = val
+
+        records.append(rec)
+
+    # Fill up to `count` with random mid-range records
     while len(records) < count:
         rec = {}
-        for field in input_fields:
-            if field["python_type"] == "Decimal":
-                mx = _field_max(field)
-                lo, hi = Decimal("0"), mx
-                val = Decimal(str(round(random.uniform(float(lo), float(hi)), field["digits_after"])))
-                rec[field["field_name"]] = val
-            else:
-                rec[field["field_name"]] = " " * field["length"]
+        for f in string_fields:
+            rec[f["field_name"]] = " " * f["length"]
+        for f in numeric_fields:
+            mx = _field_max(f)
+            lo, hi = Decimal("0"), mx
+            val = Decimal(
+                str(round(random.uniform(float(lo), float(hi)), f["digits_after"]))
+            )
+            rec[f["field_name"]] = val
         records.append(rec)
 
     return records[:count]
@@ -175,10 +171,12 @@ def generate_inputs(
 # ---------------------------------------------------------------------------
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Generate boundary-class inputs for a COBOL program.")
-    p.add_argument("--program", required=True, help="Program name, e.g. PAYROLL")
-    p.add_argument("--count", type=int, default=8, help="Number of records to generate (min 8).")
-    p.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility.")
+    p = argparse.ArgumentParser(
+        description="Generate boundary-class inputs for a COBOL program."
+    )
+    p.add_argument("--program", required=True, help="Program name, e.g. GROSSPAY")
+    p.add_argument("--count", type=int, default=8, help="Number of records (min 8).")
+    p.add_argument("--seed", type=int, default=None, help="Random seed.")
     p.add_argument("--out", default="-", help="Output JSON file (default: stdout).")
     return p
 

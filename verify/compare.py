@@ -13,8 +13,8 @@ Each comparison also yields a field-level diff if a data dictionary is
 available for the program.
 
 Usage:
-    python -m verify.compare --program PAYROLL \\
-        --golden golden_master/outputs/PAYROLL/abc123.json \\
+    python -m verify.compare --program GROSSPAY \\
+        --golden golden_master/outputs/GROSSPAY/abc123.json \\
         --a-output <hex> --b-output <hex>
 """
 from __future__ import annotations
@@ -36,8 +36,6 @@ B_WRONG = "b_wrong"
 BOTH_WRONG_SAME = "both_wrong_same"
 BOTH_WRONG_DIFFERENT = "both_wrong_different"
 
-OUTPUT_FIELD_NAMES = {"GROSS-PAY", "TAX-AMOUNT", "NET-PAY"}
-
 
 # ---------------------------------------------------------------------------
 # Field-level diff helpers
@@ -48,22 +46,41 @@ def _load_output_fields(program: str) -> list[dict[str, Any]]:
         entries = json.loads(DICT_PATH.read_text())
     except FileNotFoundError:
         return []
-    return [e for e in entries if program in e.get("programs", []) and e["field_name"] in OUTPUT_FIELD_NAMES]
+    return [
+        e for e in entries
+        if program in e.get("programs", [])
+        and e.get("record_type") == "output"
+    ]
 
 
 def _decode_field(raw: bytes, field: dict[str, Any]) -> str:
+    """Decode a single output field to a human-readable string."""
+    from golden_master.run_legacy import decode_comp3, decode_signed_display
+
     offset = field["offset"]
     length = field["length"]
-    chunk = raw[offset : offset + length].decode("ascii", errors="replace")
-    if field["python_type"] == "Decimal":
-        scale = field["digits_after"]
-        try:
-            integer_val = int(chunk)
-        except ValueError:
-            return chunk
-        val = Decimal(integer_val) / Decimal(10 ** scale)
+    chunk = raw[offset : offset + length]
+    python_type = field.get("python_type", "str")
+    usage = field.get("usage", "DISPLAY")
+    signed = field.get("signed", False)
+    total_digits = field["digits_before"] + field["digits_after"]
+    digits_after = field["digits_after"]
+
+    if python_type == "Decimal":
+        if usage == "COMP-3":
+            val = decode_comp3(chunk, total_digits, digits_after)
+        elif signed:
+            val = decode_signed_display(chunk, total_digits, digits_after)
+        else:
+            try:
+                integer_val = int(chunk.decode("ascii", errors="replace"))
+            except ValueError:
+                return chunk.decode("ascii", errors="replace")
+            val = Decimal(integer_val)
+            if digits_after:
+                val = val / Decimal(10 ** digits_after)
         return str(val)
-    return chunk
+    return chunk.decode("ascii", errors="replace")
 
 
 def field_diff(
@@ -108,7 +125,6 @@ def classify(
         return B_WRONG
     if not a_ok and b_ok:
         return A_WRONG
-    # Both wrong
     if a_output == b_output:
         return BOTH_WRONG_SAME
     return BOTH_WRONG_DIFFERENT
@@ -122,6 +138,7 @@ def compare(
 ) -> dict[str, Any]:
     """
     Full comparison returning a result dict with classification and field diffs.
+    No float arithmetic anywhere.
     """
     classification = classify(golden_bytes, a_bytes, b_bytes)
     fields = _load_output_fields(program)
@@ -142,7 +159,9 @@ def compare(
 # ---------------------------------------------------------------------------
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Compare golden and candidate outputs byte-exactly.")
+    p = argparse.ArgumentParser(
+        description="Compare golden and candidate outputs byte-exactly."
+    )
     p.add_argument("--program", required=True)
     p.add_argument("--golden", required=True,
                    help="Path to golden JSON file OR a hex string.")
@@ -156,7 +175,6 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
-    # Load golden bytes
     golden_path = Path(args.golden)
     if golden_path.exists():
         golden_data = json.loads(golden_path.read_text())

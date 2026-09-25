@@ -1,6 +1,7 @@
 {
-  "PAYROLL": {
-    "depends_on": [],
-    "wave": 0
-  }
+  "VALIDATE": { "wave": 0, "depends_on": [] },
+  "GROSSPAY": { "wave": 0, "depends_on": [] },
+  "TAXCALC":  { "wave": 1, "depends_on": ["GROSSPAY"] },
+  "DEDUCT":   { "wave": 1, "depends_on": ["GROSSPAY"] },
+  "PAYSLIP":  { "wave": 2, "depends_on": ["TAXCALC", "DEDUCT"] }
 }

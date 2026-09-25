@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build.sh — compile every COBOL module under legacy_source/
 # Usage: ./legacy_source/build.sh
-# Requires: GnuCOBOL (cobc)
+# Requires: GnuCOBOL (cobc) — programs compiled as stand-alone executables with cobc -x
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,19 +15,20 @@ if [ -f "${SCRIPT_DIR}/../.env" ]; then
 fi
 COBC="${COBC_BIN:-cobc}"
 
-compile_module() {
+compile_program() {
   local src="$1"
   local name
   name="$(basename "${src}" .cbl)"
   echo "Compiling ${name}..."
-  "${COBC}" -m -free -I "${SCRIPT_DIR}" \
-    -o "${BIN_DIR}/${name}.so" \
+  "${COBC}" -x -free -I "${SCRIPT_DIR}" \
+    -o "${BIN_DIR}/${name}" \
     "${src}"
-  echo "  -> ${BIN_DIR}/${name}.so"
+  echo "  -> ${BIN_DIR}/${name}"
 }
 
 for cbl in "${SCRIPT_DIR}"/*.cbl; do
-  compile_module "${cbl}"
+  compile_program "${cbl}"
 done
 
-echo "Build complete. Modules in ${BIN_DIR}/"
+echo ""
+echo "Build complete. Executables in ${BIN_DIR}/"

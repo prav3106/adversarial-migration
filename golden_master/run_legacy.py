@@ -1,44 +1,55 @@
 #!/usr/bin/env python3
 """
-golden_master/run_legacy.py — Run a compiled COBOL module and capture golden output.
+golden_master/run_legacy.py — Run a compiled COBOL executable and capture golden output.
 
-Encodes an input dict to a fixed-width record, calls the compiled COBOL shared
-object via ctypes, captures the output record, and writes a golden output JSON.
+Encodes an input dict to a fixed-width 80-byte binary file, invokes the compiled
+COBOL executable via subprocess passing file paths as positional arguments, reads
+the 80-byte output file, decodes it, and writes a golden output JSON.
+
+I/O contract (per PROJECT_CONTEXT.md rule 8):
+  - Write input record to a temp file (exactly 80 bytes, SEQUENTIAL).
+  - Pass input_path output_path as args 1 and 2 to the executable.
+  - Read the output file; decode per data dictionary.
+  - No ctypes. No shared objects. Pure subprocess + file I/O.
+
+COMP-3 encoding (packed decimal):
+  - Each decimal digit occupies one nibble (4 bits).
+  - The low nibble of the last byte is the sign: 0xC = positive, 0xD = negative.
+  - Total bytes = ceil((total_digits + 1) / 2).
+
+Signed DISPLAY encoding (overpunch, GnuCOBOL default):
+  - Sign is embedded as a zone in the last digit byte.
+  - Positive last digit: 0x30-0x39 (standard ASCII '0'-'9').
+  - Negative last digit: 0x70-0x79 (overpunch zone 7 for zone 3 → 0x30 → 0x70).
 
 Usage:
-    python -m golden_master.run_legacy --program PAYROLL --input '{"EMP-ID":"000001",...}'
-    python -m golden_master.run_legacy --program PAYROLL --batch inputs.json
-    python -m golden_master.run_legacy --program PAYROLL --generate --count 20
-
-Output schema (one file per input under golden_master/outputs/<PROGRAM>/):
-  {
-    "input": { <field>: <value>, ... },
-    "output_hex": "...",
-    "output_decoded": { <field>: <value>, ... },
-    "program": "PAYROLL",
-    "input_hash": "<sha256>"
-  }
+    python -m golden_master.run_legacy --program GROSSPAY --generate --count 20
+    python -m golden_master.run_legacy --program TAXCALC --input '{"TC-EMP-ID":"000001",...}'
 """
 from __future__ import annotations
 
 import argparse
-import ctypes
 import hashlib
 import json
+import math
 import os
+import subprocess
 import sys
-from decimal import Decimal
+import tempfile
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Config from environment (loaded lazily so tests can override)
+# Config
 # ---------------------------------------------------------------------------
 
 ROOT = Path(__file__).parent.parent
 LEGACY_BIN_DIR = ROOT / "legacy_source" / "bin"
 OUTPUT_BASE = ROOT / "golden_master" / "outputs"
 DICT_PATH = ROOT / "dictionary" / "data_dictionary.json"
+
+RECORD_LEN = 80
 
 
 def _load_env() -> None:
@@ -52,110 +63,271 @@ def _load_env() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Data dictionary helpers
+# Data dictionary
 # ---------------------------------------------------------------------------
 
 def load_dict(program: str) -> list[dict[str, Any]]:
+    """Return all data dictionary entries for `program`."""
     entries = json.loads(DICT_PATH.read_text())
     return [e for e in entries if program in e.get("programs", [])]
 
 
+def input_fields(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [f for f in fields if f.get("record_type") == "input"]
+
+
+def output_fields(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [f for f in fields if f.get("record_type") == "output"]
+
+
 # ---------------------------------------------------------------------------
-# Encoding: input dict → fixed-width bytes
+# COMP-3 (packed decimal) encode / decode
 # ---------------------------------------------------------------------------
 
-INPUT_FIELD_NAMES = {"EMP-ID", "HOURS-WORKED", "HOURLY-RATE", "TAX-RATE"}
-OUTPUT_FIELD_NAMES = {"GROSS-PAY", "TAX-AMOUNT", "NET-PAY"}
-INPUT_RECORD_LEN = 80
-OUTPUT_RECORD_LEN = 80
+def encode_comp3(value: Decimal, total_digits: int) -> bytes:
+    """
+    Encode a Decimal value to COMP-3 packed bytes.
+
+    - `total_digits` = digits_before + digits_after (the total field capacity).
+    - The value must already be scaled (caller passes the integer representation).
+    - Sign nibble: 0xC = positive/zero, 0xD = negative.
+    - Overflow: high-order truncation (modulo 10^total_digits).
+    """
+    n_bytes = math.ceil((total_digits + 1) / 2)
+    # Work with the absolute integer (already shifted by scale by caller)
+    negative = value < 0
+    abs_val = abs(int(value))
+    # High-order truncation
+    modulus = 10 ** total_digits
+    abs_val = abs_val % modulus
+    # Sign nibble
+    sign_nibble = 0xD if negative else 0xC
+    # Build digit string (total_digits digits, zero-padded on left)
+    digit_str = str(abs_val).zfill(total_digits)
+    # Pack into bytes: even digit count → leading zero pair
+    # We have total_digits digit nibbles + 1 sign nibble
+    # Total nibbles = total_digits + 1
+    # Bytes = ceil((total_digits + 1) / 2)
+    # Arrange: if total_digits is odd → first nibble is 0 (padding)
+    nibbles = [int(d) for d in digit_str] + [sign_nibble]
+    if len(nibbles) % 2 == 1:
+        nibbles = [0] + nibbles
+    result = bytearray(n_bytes)
+    for i in range(n_bytes):
+        result[i] = (nibbles[2 * i] << 4) | nibbles[2 * i + 1]
+    return bytes(result)
 
 
-def encode_input(record: dict[str, Any], fields: list[dict[str, Any]]) -> bytes:
+def decode_comp3(data: bytes, total_digits: int, digits_after: int) -> Decimal:
     """
-    Encode an input dict to a fixed-width byte string.
-    Numeric fields are zero-padded; the V (implied decimal) is NOT written.
-    String fields are space-padded on the right.
-    Filler bytes are spaces.
-    """
-    buf = bytearray(b" " * INPUT_RECORD_LEN)
-    for field in fields:
-        if field["field_name"] not in INPUT_FIELD_NAMES:
-            continue
-        offset = field["offset"]
-        length = field["length"]
-        value = record.get(field["field_name"])
-        if field["python_type"] == "Decimal":
-            # Clamp to field size (high-order truncation)
-            d = Decimal(str(value)) if not isinstance(value, Decimal) else value
-            scale = field["digits_after"]
-            total = field["digits_before"] + scale
-            # Shift to integer representation
-            shifted = int(d * (10 ** scale))
-            # Truncate to field width (high-order truncation)
-            shifted = shifted % (10 ** total)
-            encoded = str(abs(shifted)).zfill(length)
-            buf[offset : offset + length] = encoded.encode("ascii")
-        else:
-            s = str(value) if value is not None else ""
-            s = s.ljust(length)[:length]
-            buf[offset : offset + length] = s.encode("ascii")
-    return bytes(buf)
+    Decode COMP-3 packed bytes to a Decimal.
 
-
-def decode_output(raw: bytes, fields: list[dict[str, Any]]) -> dict[str, Any]:
+    - `total_digits` = digits_before + digits_after.
+    - `digits_after` = scale for implied decimal point.
     """
-    Decode a fixed-width output byte string into a dict of Decimal/str values.
-    """
-    result: dict[str, Any] = {}
-    for field in fields:
-        if field["field_name"] not in OUTPUT_FIELD_NAMES:
-            continue
-        offset = field["offset"]
-        length = field["length"]
-        chunk = raw[offset : offset + length].decode("ascii", errors="replace")
-        if field["python_type"] == "Decimal":
-            scale = field["digits_after"]
-            try:
-                integer_val = int(chunk)
-            except ValueError:
-                integer_val = 0
-            result[field["field_name"]] = Decimal(integer_val) / Decimal(10 ** scale)
-        else:
-            result[field["field_name"]] = chunk
+    nibbles = []
+    for b in data:
+        nibbles.append((b >> 4) & 0xF)
+        nibbles.append(b & 0xF)
+    # Last nibble is sign
+    sign_nibble = nibbles[-1]
+    digit_nibbles = nibbles[:-1]
+    # Take the last total_digits nibbles (may have leading zero padding)
+    digit_nibbles = digit_nibbles[-total_digits:]
+    integer_val = int("".join(str(n) for n in digit_nibbles))
+    negative = sign_nibble == 0xD
+    result = Decimal(integer_val)
+    if digits_after:
+        result = result / Decimal(10 ** digits_after)
+    if negative:
+        result = -result
     return result
 
 
 # ---------------------------------------------------------------------------
-# COBOL runner via ctypes
+# Signed DISPLAY encode / decode (overpunch, SIGN TRAILING)
+# ---------------------------------------------------------------------------
+# GnuCOBOL default: SIGN TRAILING SEPARATE is NOT the default.
+# Default (SIGN TRAILING, NOT SEPARATE = overpunch):
+#   Positive digits 0-9: ASCII 0x30-0x39 (unchanged).
+#   Negative digits 0-9: 0x70-0x79 (zone nibble changed from 3 to 7).
+
+def encode_signed_display(integer_val: int, total_digits: int) -> bytes:
+    """
+    Encode a signed integer (already scaled) to a DISPLAY field with overpunch.
+    The sign is embedded in the last byte's zone nibble.
+    Positive: standard ASCII digits. Negative: last byte zone = 0x7 instead of 0x3.
+    """
+    negative = integer_val < 0
+    abs_val = abs(integer_val)
+    # High-order truncation
+    abs_val = abs_val % (10 ** total_digits)
+    digit_str = str(abs_val).zfill(total_digits)
+    raw = bytearray(digit_str.encode("ascii"))
+    if negative:
+        # Change zone nibble of last byte from 0x3 to 0x7
+        raw[-1] = (raw[-1] & 0x0F) | 0x70
+    return bytes(raw)
+
+
+def decode_signed_display(data: bytes, total_digits: int, digits_after: int) -> Decimal:
+    """
+    Decode a signed DISPLAY field with overpunch.
+    Negative if last byte zone nibble == 0x7.
+    """
+    if not data:
+        return Decimal("0")
+    last_byte = data[-1]
+    negative = (last_byte & 0xF0) == 0x70
+    # Restore last byte to standard ASCII digit
+    clean = bytearray(data)
+    if negative:
+        clean[-1] = (last_byte & 0x0F) | 0x30
+    try:
+        integer_val = int(clean.decode("ascii", errors="replace"))
+    except ValueError:
+        integer_val = 0
+    result = Decimal(integer_val)
+    if digits_after:
+        result = result / Decimal(10 ** digits_after)
+    if negative:
+        result = -result
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Encoding: input dict → 80-byte fixed-width record
+# ---------------------------------------------------------------------------
+
+def encode_input(record: dict[str, Any], fields: list[dict[str, Any]]) -> bytes:
+    """
+    Encode an input dict to a fixed-width 80-byte byte string.
+
+    - Numeric DISPLAY fields: zero-padded integer representation (V not written).
+      Signed fields: overpunch on last byte.
+    - COMP-3 fields: packed decimal.
+    - String (PIC X) fields: space-padded on right.
+    - Record is zero-padded to RECORD_LEN.
+    """
+    buf = bytearray(b" " * RECORD_LEN)
+    for field in fields:
+        name = field["field_name"]
+        if name not in record:
+            continue
+        offset = field["offset"]
+        length = field["length"]
+        value = record[name]
+        usage = field.get("usage", "DISPLAY")
+        digits_before = field["digits_before"]
+        digits_after = field["digits_after"]
+        total_digits = digits_before + digits_after
+        signed = field.get("signed", False)
+        python_type = field.get("python_type", "str")
+
+        if python_type == "Decimal":
+            d = Decimal(str(value)) if not isinstance(value, Decimal) else value
+            scale = digits_after
+            # Shift to integer representation (truncate, not round)
+            shifted = int((d * Decimal(10 ** scale)).to_integral_value(rounding=ROUND_DOWN))
+            if usage == "COMP-3":
+                encoded = encode_comp3(Decimal(shifted) if d >= 0 else Decimal(-abs(shifted)), total_digits)
+                buf[offset : offset + length] = encoded
+            elif signed:
+                encoded = encode_signed_display(shifted, total_digits)
+                buf[offset : offset + length] = encoded
+            else:
+                # Unsigned DISPLAY: high-order truncation on abs value
+                abs_shifted = abs(shifted) % (10 ** total_digits)
+                encoded = str(abs_shifted).zfill(length).encode("ascii")
+                buf[offset : offset + length] = encoded
+        else:
+            # Alphanumeric: space-padded
+            s = str(value) if value is not None else ""
+            s = s.ljust(length)[:length]
+            buf[offset : offset + length] = s.encode("ascii", errors="replace")
+
+    return bytes(buf)
+
+
+# ---------------------------------------------------------------------------
+# Decoding: 80-byte output → dict
+# ---------------------------------------------------------------------------
+
+def decode_output(raw: bytes, fields: list[dict[str, Any]]) -> dict[str, Any]:
+    """
+    Decode a fixed-width output byte string into a dict of Decimal/str values.
+    Handles COMP-3 and signed DISPLAY correctly.
+    """
+    result: dict[str, Any] = {}
+    for field in fields:
+        name = field["field_name"]
+        offset = field["offset"]
+        length = field["length"]
+        usage = field.get("usage", "DISPLAY")
+        digits_before = field["digits_before"]
+        digits_after = field["digits_after"]
+        total_digits = digits_before + digits_after
+        signed = field.get("signed", False)
+        python_type = field.get("python_type", "str")
+
+        chunk = raw[offset : offset + length]
+
+        if python_type == "Decimal":
+            if usage == "COMP-3":
+                result[name] = decode_comp3(chunk, total_digits, digits_after)
+            elif signed:
+                result[name] = decode_signed_display(chunk, total_digits, digits_after)
+            else:
+                try:
+                    integer_val = int(chunk.decode("ascii", errors="replace"))
+                except ValueError:
+                    integer_val = 0
+                val = Decimal(integer_val)
+                if digits_after:
+                    val = val / Decimal(10 ** digits_after)
+                result[name] = val
+        else:
+            result[name] = chunk.decode("ascii", errors="replace")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Subprocess runner
 # ---------------------------------------------------------------------------
 
 def run_cobol(program: str, input_bytes: bytes) -> bytes:
     """
-    Call the compiled COBOL shared object.
-    The module is expected at legacy_source/bin/<PROGRAM>.so.
-    It must accept two PIC X(80) LINKAGE SECTION arguments: input and output.
+    Invoke the compiled COBOL executable via subprocess with file-based I/O.
+    Writes input to a temp file, passes both paths as positional args, reads output.
     """
     _load_env()
-    so_path = Path(os.environ.get("LEGACY_SOURCE_DIR", str(ROOT / "legacy_source"))) / "bin" / f"{program}.so"
-
-    if not so_path.exists():
+    bin_dir = Path(os.environ.get("LEGACY_BIN_DIR", str(LEGACY_BIN_DIR)))
+    exe = bin_dir / program.upper()
+    if not exe.exists():
         raise FileNotFoundError(
-            f"Compiled COBOL module not found: {so_path}\n"
-            f"Run: cd legacy_source && ./build.sh"
+            f"Compiled COBOL executable not found: {exe}\n"
+            f"Run: bash legacy_source/build.sh"
         )
 
-    lib = ctypes.CDLL(str(so_path))
+    with tempfile.TemporaryDirectory() as tmpdir:
+        in_path = Path(tmpdir) / "input.dat"
+        out_path = Path(tmpdir) / "output.dat"
+        in_path.write_bytes(input_bytes)
+        # Pre-create output file so COBOL OPEN OUTPUT doesn't need to create it
+        out_path.write_bytes(b"\x00" * RECORD_LEN)
 
-    # GnuCOBOL module entry: void <PROGRAM>(void*, void*)
-    func = getattr(lib, program.upper())
-    func.restype = None
-    func.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-
-    in_buf = ctypes.create_string_buffer(input_bytes, OUTPUT_RECORD_LEN)
-    out_buf = ctypes.create_string_buffer(b" " * OUTPUT_RECORD_LEN, OUTPUT_RECORD_LEN)
-
-    func(in_buf, out_buf)
-    return bytes(out_buf.raw)
+        result = subprocess.run(
+            [str(exe), str(in_path), str(out_path)],
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"COBOL program {program} exited with code {result.returncode}:\n{stderr}"
+            )
+        return out_path.read_bytes()[:RECORD_LEN]
 
 
 # ---------------------------------------------------------------------------
@@ -170,17 +342,29 @@ def _input_hash(record: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
-def run_and_save(program: str, record: dict[str, Any], fields: list[dict[str, Any]]) -> dict[str, Any]:
-    """Run the COBOL binary for one input record and persist the golden output."""
-    input_bytes = encode_input(record, fields)
+def run_and_save(
+    program: str,
+    record: dict[str, Any],
+    fields: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """
+    Run the COBOL binary for one input record and persist the golden output.
+    Returns the golden record dict.
+    """
+    if fields is None:
+        fields = load_dict(program)
+    in_fields = input_fields(fields)
+    out_fields = output_fields(fields)
+
+    input_bytes = encode_input(record, in_fields)
     output_bytes = run_cobol(program, input_bytes)
-    output_decoded = decode_output(output_bytes, fields)
+    decoded = decode_output(output_bytes, out_fields)
     h = _input_hash(record)
 
-    finding: dict[str, Any] = {
+    golden: dict[str, Any] = {
         "input": {k: str(v) for k, v in record.items()},
         "output_hex": output_bytes.hex(),
-        "output_decoded": {k: str(v) for k, v in output_decoded.items()},
+        "output_decoded": {k: str(v) for k, v in decoded.items()},
         "program": program,
         "input_hash": h,
     }
@@ -188,8 +372,8 @@ def run_and_save(program: str, record: dict[str, Any], fields: list[dict[str, An
     out_dir = OUTPUT_BASE / program
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{h}.json"
-    out_file.write_text(json.dumps(finding, indent=2))
-    return finding
+    out_file.write_text(json.dumps(golden, indent=2))
+    return golden
 
 
 # ---------------------------------------------------------------------------
@@ -198,11 +382,11 @@ def run_and_save(program: str, record: dict[str, Any], fields: list[dict[str, An
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Run COBOL binary and record golden outputs.")
-    p.add_argument("--program", required=True)
+    p.add_argument("--program", required=True, help="Program name (e.g. GROSSPAY).")
     p.add_argument("--input", help="JSON string of one input record.")
     p.add_argument("--batch", help="JSON file with a list of input records.")
     p.add_argument("--generate", action="store_true", help="Auto-generate boundary inputs.")
-    p.add_argument("--count", type=int, default=8, help="Number of inputs to generate (with --generate).")
+    p.add_argument("--count", type=int, default=8, help="Number of inputs (with --generate).")
     p.add_argument("--seed", type=int, default=42)
     return p
 
@@ -215,7 +399,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.input:
         raw = json.loads(args.input)
-        records = [{k: Decimal(str(v)) if isinstance(v, (int, float, str)) else v for k, v in raw.items()}]
+        records = [{k: Decimal(str(v)) for k, v in raw.items()}]
 
     elif args.batch:
         raw_list = json.loads(Path(args.batch).read_text())
@@ -230,15 +414,17 @@ def main(argv: list[str] | None = None) -> int:
         print("Provide --input, --batch, or --generate.", file=sys.stderr)
         return 1
 
+    written = 0
     for rec in records:
         try:
-            finding = run_and_save(args.program, rec, fields)
-            print(f"  {finding['input_hash']}  {finding['output_hex'][:20]}...")
-        except FileNotFoundError as exc:
+            golden = run_and_save(args.program, rec, fields)
+            print(f"  {golden['input_hash']}  {golden['output_hex'][:24]}...")
+            written += 1
+        except (FileNotFoundError, RuntimeError) as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
 
-    print(f"\n{len(records)} golden record(s) written to golden_master/outputs/{args.program}/")
+    print(f"\n{written} golden record(s) written to golden_master/outputs/{args.program}/")
     return 0
 
 
