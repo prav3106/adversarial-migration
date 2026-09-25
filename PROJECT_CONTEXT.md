@@ -25,10 +25,15 @@ Workflow category: application maintenance (legacy modernization).
 3. Overflow behavior must match COBOL (high-order truncation into the field size).
 4. Output comparison is **byte-exact** on fixed-width records, with no normalization.
 5. Handle COMP-3 packed decimal, signed fields, and implied decimals (V) per the
-   data dictionary. Never guess a field's format.
+   data dictionary. Never guess a field's format. Moving a negative value into
+   an unsigned field stores the absolute value (the sign is dropped, not clamped).
 6. Translators must not add validation, logging, or logic absent from the COBOL.
 7. No secrets in code. Config comes from `.env`, which is gitignored. Never print
    or commit credentials.
+8. COBOL programs are compiled with `cobc -x` and invoked via subprocess using
+   file-based I/O. No ctypes, no shared libraries.
+9. The naive baseline is an honest single-pass translation following all these
+   rules, with no prosecutor loop. Never deliberately weaken it.
 
 ## Repository structure
 - `legacy_source/` COBOL programs, copybooks, build.sh (source of truth, never edit)
