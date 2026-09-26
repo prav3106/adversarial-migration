@@ -74,10 +74,12 @@ def cobol_trunc_signed(value: Decimal, digits_before: int, digits_after: int) ->
 # ---------------------------------------------------------------------------
 
 # Overpunch table for COBOL DISPLAY signed (GnuCOBOL / ASCII):
-#   positive:  0->{, 1->A, 2->B, 3->C, 4->D, 5->E, 6->F, 7->G, 8->H, 9->I
-#   negative:  0->}, 1->J, 2->K, 3->L, 4->M, 5->N, 6->O, 7->P, 8->Q, 9->R
+#   positive (not used — GnuCOBOL emits plain ASCII digits for non-negative):
+#     0->{, 1->A, 2->B, 3->C, 4->D, 5->E, 6->F, 7->G, 8->H, 9->I
+#   negative: GnuCOBOL stores last digit as (0x70 | digit):
+#     0->p, 1->q, 2->r, 3->s, 4->t, 5->u, 6->v, 7->w, 8->x, 9->y
 _OVERPUNCH_POS = b"{ABCDEFGHI"
-_OVERPUNCH_NEG = b"}JKLMNOPQR"
+_OVERPUNCH_NEG = bytes(0x70 | d for d in range(10))
 
 
 def enc_unsigned_display(value: Decimal, digits_before: int, digits_after: int) -> bytes:

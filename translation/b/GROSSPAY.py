@@ -146,7 +146,7 @@ def _calc_grosspay(ws: _WS) -> None:
     ws.GP_REGULAR_PAY = _store_truncate(ws.WS_WORK_PAY, 7, 2)
 
     # Overtime at 1.5x rate — COMPUTE truncates (no ROUNDED)
-    ws.WS_OT_RATE = _trunc(ws.GP_HOURLY_RATE * Decimal("1.5"), 4, 2)
+    ws.WS_OT_RATE = _store_truncate(ws.GP_HOURLY_RATE * Decimal("1.5"), 4, 2)
 
     # TRAP: overtime COMPUTE can overflow GP-OVERTIME-PAY at field max
     #       9(7)V9(2) max = 9999999.99; WS-OT-HOURS * WS-OT-RATE may exceed it
