@@ -32,3 +32,23 @@ def test_signed_input_uses_ascii_overpunch_and_sign_is_dropped():
     assert b"9999y" in enc
     raw = run_cobol("VALIDATE", enc)
     assert decode_output(raw, output_fields(fields))["VL-HOURS-CLEAN"] == Decimal("999.99")
+  
+def _run_deduct(gross, health, retire):
+    fields = load_dict("DEDUCT")
+    rec = {f["field_name"]: Decimal("0") for f in input_fields(fields)}
+    rec.update({"DD-GROSS-PAY": Decimal(gross), "DD-HEALTH-RATE": Decimal(health),
+                "DD-RETIREMENT-RATE": Decimal(retire)})
+    raw = run_cobol("DEDUCT", encode_input(rec, input_fields(fields)))
+    return decode_output(raw, output_fields(fields))
+
+
+def test_deduct_rounded_tie_and_truncation_in_same_record():
+    out = _run_deduct("100.10", "0.0500", "0.0550")
+    assert out["DD-HEALTH-DED"] == Decimal("5.01")     # tie 5.005, half-up
+    assert out["DD-RETIRE-DED"] == Decimal("5.50")     # 5.5055 truncated
+    assert out["DD-TOTAL-DEDUCT"] == Decimal("10.51")
+    assert out["DD-AFTER-DEDUCT"] == Decimal("89.59")
+
+
+def test_deduct_odd_digit_tie_rounds_up():
+    assert _run_deduct("100.50", "0.0500", "0.0000")["DD-HEALTH-DED"] == Decimal("5.03")

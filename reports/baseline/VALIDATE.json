@@ -1,14 +1,5 @@
 {
   "found": false,
   "inputs_tested": 208,
-  "boundary_classes_covered": [
-    "zero",
-    "smallest_unit",
-    "max_value",
-    "max_minus_unit",
-    "negative_max",
-    "rounding_edge",
-    "overflow",
-    "random_mid_range"
-  ]
+  "seed_records_run": 8
 }

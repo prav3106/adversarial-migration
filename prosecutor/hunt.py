@@ -268,7 +268,7 @@ def run_hunt(
     return {
         "found": False,
         "inputs_tested": inputs_tested_box[0],
-        "boundary_classes_covered": list(BOUNDARY_CLASSES),
+        "seed_records_run": len(seed_records),
     }
 
 
@@ -294,7 +294,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("program", help="Program name, e.g. TAXCALC")
     p.add_argument("--budget", type=int, default=200, help="Total Hypothesis examples.")
-    p.add_argument("--variants", nargs="+", default=["a", "b"], choices=["a", "b", "naive"])
+    p.add_argument("--variants", nargs="+", default=["a", "b"], choices=["a", "b"])
     return p
 
 
@@ -330,7 +330,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"\nCLEAN  inputs_tested={result['inputs_tested']}  "
-          f"boundary_classes={result['boundary_classes_covered']}")
+          f"seed_records_run={result['seed_records_run']}")
     print(f"Saved → {path}")
     return 0
 

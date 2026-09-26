@@ -27,17 +27,24 @@ PINNED_CASES = {
         # Two-stage truncation: 190.00 * 0.0275 = 5.225 -> COBOL stores 5.22
         {"TC-GROSS-PAY": Decimal("190.00"), "TC-TAX-RATE": Decimal("0.0275")},
     ],
+    "DEDUCT": [
+        # Health tie 5.005 -> 5.01 (HALF_UP); retirement 5.5055 truncated -> 5.50
+        {"DD-GROSS-PAY": Decimal("100.10"), "DD-HEALTH-RATE": Decimal("0.0500"),
+        "DD-RETIREMENT-RATE": Decimal("0.0550")},
+        # Odd-digit tie 5.025 -> 5.03 (HALF_UP); banker's would give 5.02
+        {"DD-GROSS-PAY": Decimal("100.50"), "DD-HEALTH-RATE": Decimal("0.0500"),
+        "DD-RETIREMENT-RATE": Decimal("0.0000")},
+    ],
 }
 
 
 def with_pinned(program, records):
-    """Replace the first records with pinned cases, filling other fields from a generated record."""
+    """Append pinned cases, filling other fields from a generated record."""
     cases = PINNED_CASES.get(program, [])
     if not cases or not records:
         return records
     base = records[0]
-    pinned = [{**base, **case} for case in cases]
-    return pinned + records[len(pinned):]
+    return records + [{**base, **case} for case in cases]
 DICT_PATH = Path(__file__).parent.parent / "dictionary" / "data_dictionary.json"
 
 BOUNDARY_CLASSES = [

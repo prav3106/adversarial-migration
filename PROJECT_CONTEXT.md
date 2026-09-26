@@ -32,18 +32,19 @@ Workflow category: application maintenance (legacy modernization).
    or commit credentials.
 8. COBOL programs are compiled with `cobc -x` and invoked via subprocess using
    file-based I/O. No ctypes, no shared libraries.
-9. The naive baseline is an honest single-pass translation following all these
-   rules, with no prosecutor loop. Never deliberately weaken it.
+9. Baseline: Translators A and B are each an honest single-pass translation.
+   Their round-1 findings (reports/baseline/) are the benchmark of what would
+   ship without adversarial verification. No separate naive translation.
 
 ## Repository structure
 - `legacy_source/` COBOL programs, copybooks, build.sh (source of truth, never edit)
 - `dictionary/` extract.py, data_dictionary.json, dependency_graph.json
 - `golden_master/` run_legacy.py, strategies.py, outputs/<program>/<hash>.json
-- `translation/a/`, `translation/b/`, `translation/naive/` one .py per program
+- `translation/a/`, `translation/b/` one .py per program
 - `verify/` run_candidate.py, compare.py
 - `prosecutor/` hunt.py
 - `orchestrator.py`
-- `reports/` findings/, fix_requests/, run_log.json, naive_baseline.json, BENCHMARK.md
+- `reports/` findings/, fix_requests/, run_log.json, BENCHMARK.md
 - `docs/` PLAN.md, bob-sessions/ (screenshots), submission docs
 - `tests/` pytest tests mirroring the structure above
 
@@ -87,6 +88,11 @@ random mid-range
 
 ## Definition of done (project)
 - Every program is PASSED or NEEDS_HUMAN_REVIEW, with a full run log.
-- The naive baseline has been measured against the same inputs.
+- Round-1 findings for A and B are saved in reports/baseline/ as the single-pass benchmark.
 - reports/BENCHMARK.md has been generated.
 - The repo contains no secrets.
+
+Note: the overflow and rounding_edge seeds are normalized into the field
+(a record cannot hold an out-of-range value), so they reduce to in-range
+values. Computational overflow is exercised by max_value inputs, and
+rounding ties are exercised by hand-verified PINNED_CASES (TAXCALC, DEDUCT).

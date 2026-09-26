@@ -31,5 +31,4 @@ Thumbs.db
 
 # Reports (keep BENCHMARK.md, ignore raw JSON runs)
 reports/run_log.json
-reports/naive_baseline.json
 .hypothesis/

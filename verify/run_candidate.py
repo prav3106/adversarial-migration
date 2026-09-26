@@ -28,7 +28,7 @@ ROOT = Path(__file__).parent.parent
 def load_module(program: str, variant: str):
     """
     Dynamically import translation/<variant>/<program>.py.
-    variant: 'a', 'b', or 'naive'
+    variant: 'a', 'b'
     """
     module_path = ROOT / "translation" / variant / f"{program}.py"
     if not module_path.exists():
@@ -65,7 +65,7 @@ def run_candidate(program: str, variant: str, record: dict[str, Any]) -> bytes:
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Run a translated Python module on an input record.")
     p.add_argument("--program", required=True)
-    p.add_argument("--variant", required=True, choices=["a", "b", "naive"],
+    p.add_argument("--variant", required=True, choices=["a", "b"],
                    help="Translation variant to run.")
     p.add_argument("--input", required=True,
                    help="JSON object of field_name -> value.")

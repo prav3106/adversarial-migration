@@ -114,8 +114,8 @@ def test_clean_when_both_correct(monkeypatch):
 
     assert result["found"] is False
     assert result["inputs_tested"] > 0
-    assert "boundary_classes_covered" in result
-    assert len(result["boundary_classes_covered"]) > 0
+    assert "seed_records_run" in result
+    assert result["seed_records_run"] > 0
 
 
 def test_detects_broken_a(monkeypatch):
@@ -231,7 +231,7 @@ def test_save_result_writes_file(tmp_path, monkeypatch):
     clean_result = {
         "found": False,
         "inputs_tested": 42,
-        "boundary_classes_covered": ["zero", "max_value"],
+        "seed_records_run": 8,
     }
     path = save_result(clean_result, "TESTPROG")
     assert path.exists()
