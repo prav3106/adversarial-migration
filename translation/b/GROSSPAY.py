@@ -64,7 +64,7 @@ def _encode_comp3(value: Decimal, digits_before: int, digits_after: int) -> byte
     Encode COMP-3 (packed decimal) unsigned.
     PIC 9(d)V9(s): total_digits = d + s.
     Packed length = ceil((total_digits + 1) / 2) bytes.
-    Sign nibble: 0xC (positive/unsigned), 0xD (negative).
+    Sign nibble: 0xF (unsigned/positive for PIC 9 fields).
     Last nibble is sign.
     """
     total_digits = digits_before + digits_after
@@ -81,7 +81,7 @@ def _encode_comp3(value: Decimal, digits_before: int, digits_after: int) -> byte
 
     # Pad to even total chars to form nibble pairs before sign nibble
     # Total nibbles = total_digits + 1 (for sign); pad to even
-    all_nibbles = list(int(d) for d in digit_str) + [0xC]  # 0xC = positive/unsigned
+    all_nibbles = list(int(d) for d in digit_str) + [0xF]  # 0xF = unsigned (PIC 9 without S)
 
     # If total nibbles is odd (total_digits+1 is odd), left-pad with 0 nibble
     if len(all_nibbles) % 2 != 0:

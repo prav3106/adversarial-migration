@@ -99,18 +99,22 @@ def enc_signed_display(value: Decimal, digits_before: int, digits_after: int) ->
     Encode a signed Decimal as COBOL DISPLAY S9(digits_before)V9(digits_after).
     Byte length = digits_before + digits_after (sign encoded in last byte via overpunch).
     Overflow: high-order truncation of magnitude.
+
+    GnuCOBOL DISPLAY signed encoding:
+      - Negative values: last digit is replaced by overpunch character (}JKLMNOPQR).
+      - Positive (and zero) values: all digits are plain ASCII — no overpunch applied.
     """
     total_digits = digits_before + digits_after
     int_repr = int((abs(value) * (Decimal(10) ** digits_after)).to_integral_value(rounding=ROUND_DOWN))
     int_repr = int_repr % (10 ** total_digits)
     digits_str = str(int_repr).zfill(total_digits)
-    last_digit = int(digits_str[-1])
-    body = digits_str[:-1].encode("ascii")
     if value < 0:
+        last_digit = int(digits_str[-1])
+        body = digits_str[:-1].encode("ascii")
         last_byte = bytes([_OVERPUNCH_NEG[last_digit]])
+        return body + last_byte
     else:
-        last_byte = bytes([_OVERPUNCH_POS[last_digit]])
-    return body + last_byte
+        return digits_str.encode("ascii")
 
 
 # ---------------------------------------------------------------------------
